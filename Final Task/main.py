@@ -10,6 +10,7 @@ ROOTDIR = 'vk_fotos'
 
 def get_photos_vk():
 
+    global album_title
     print('Получаем данные из vk...')
 
     vk = VkAPI()
@@ -30,9 +31,13 @@ def get_photos_vk():
                     albums_dict.update({str(album['id']): album['title']})
                     album_id_print = f"id: {album['id']}, Название: {album['title']}, Число фотографий: {len(vk.get_user_photos_list(owner_id, album['id']))}"
                     print(album_id_print.replace('-', ''))
-            temporary_album_id = int(input('Введите id альбома: '))
-            album_id = str(temporary_album_id * -1)
-            album_title = albums_dict[album_id]
+            try:
+                temporary_album_id = int(input('Введите id альбома: '))
+                album_id = str(temporary_album_id * -1)
+                album_title = albums_dict[album_id]
+            except(Exception):
+                print('Такого id нет, будьте внимательнее')
+                quit()
     photos_list = vk.get_user_photos_list(owner_id, album_id)
 
     print(f'Всего фотографий в альбоме: {len(vk.get_user_photos_list(owner_id, album_id))}.')
@@ -54,17 +59,17 @@ def upload_to_yadisk(uploader, photos_list, path):
 
         upload_url = uploader.get_upload_url(path=path, file=filename)
         upload_result = uploader.upload(requests.get(photo_url).content, upload_url)
+        if upload_result >= 400 and upload_result < 500:
+            if upload_result == 401:
+                print(f'Проверьте правильность ввода YandexDisk - токена, возможно он устарел.')
+                quit()
+            else:
+                print(f'Ошибка на стороне клиента, файл с id {photo_id} не загружен: код ошибки - {upload_result}')
+                quit()
 
-        if upload_result != 201:
-            print(f'Ошибка на стороне яндекса, файл с id {photo_id} не загружен: {upload_result}')
-            log.append(
-                {
-                    'filename': filename,
-                    'size': photo_size,
-                    'result': upload_result
-                }
-
-            )
+        elif upload_result > 500:
+            print(f'Ошибка на стороне сервера, файл с id {photo_id} не загружен: код ошибки - {upload_result}')
+            quit()
         else:
             log.append(
                 {
@@ -85,12 +90,11 @@ def main():
             photos_list, owner_id, album_title = commands[command]()
             path = f'/{ROOTDIR}/{owner_id}/{album_title}'
 
-            ya_token_input = input('Введите токен с полигона Яндекса: ')
+            ya_token_input = input('Введите токен с полигона Яндекса или нажмите Enter для использования токена, указанного в tokens.py: ')
             if ya_token_input:
                 uploader = YaUploader(ya_token_input)
             else:
                 uploader = YaUploader()
-
             temp_path = ''
             for folder in tqdm.tqdm(path.split('/'),desc='Проверка пути на Яндекс.диске, создание папок', ncols=100, colour='blue', bar_format='{l_bar}{bar}|'):
                 temp_path += folder + '/'
